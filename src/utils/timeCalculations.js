@@ -1,12 +1,12 @@
 /**
- * Working Hours Calculator - Core Calculation Logic
- * All time is handled as minutes-from-midnight (0–1439).
- * Cross-midnight is supported: Out < In is treated as next-day Out.
+ * Working Hours Calculator — Core Utilities (v2)
+ * Model: Arrival + Breaks → Live Working Time
+ * All durations use seconds for live-update precision.
  */
 
-/**
- * Parse "HH:MM" string → minutes from midnight, or null if invalid.
- */
+// ── Parsing & Formatting ───────────────────────────────────────────────────
+
+/** Parse "HH:MM" → minutes from midnight, or null if invalid. */
 export function parseTime(timeStr) {
   if (!timeStr || typeof timeStr !== 'string') return null;
   const match = timeStr.match(/^(\d{1,2}):(\d{2})$/);
@@ -17,126 +17,196 @@ export function parseTime(timeStr) {
   return h * 60 + m;
 }
 
-/**
- * Format minutes → "Xh Ym" or "Ym" or "0m".
- */
+/** Format total minutes → "Xh Ym" | "Ym" | "0m" */
 export function formatDuration(totalMinutes) {
   if (totalMinutes <= 0) return '0m';
   const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
+  const m = Math.floor(totalMinutes % 60);
   if (h === 0) return `${m}m`;
   if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 }
 
-/**
- * Format minutes → "Xh Ym" long form for display.
- */
-export function formatDurationLong(totalMinutes) {
-  if (totalMinutes <= 0) return '0 minutes';
-  const h = Math.floor(totalMinutes / 60);
-  const m = totalMinutes % 60;
-  const parts = [];
-  if (h > 0) parts.push(`${h} hour${h !== 1 ? 's' : ''}`);
-  if (m > 0) parts.push(`${m} minute${m !== 1 ? 's' : ''}`);
-  return parts.join(' ');
+/** Format total seconds → "Xh Ym Zs" for live display (tabular-nums friendly). */
+export function formatDurationLive(totalSeconds) {
+  if (totalSeconds <= 0) return '0s';
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+  const s = Math.floor(totalSeconds % 60);
+  if (h === 0 && m === 0) return `${s}s`;
+  if (h === 0) return `${m}m ${String(s).padStart(2, '0')}s`;
+  return `${h}h ${m}m ${String(s).padStart(2, '0')}s`;
 }
 
-/**
- * Calculate duration between two minutes-from-midnight values.
- * Supports cross-midnight (outMin < inMin → add 1440).
- */
-export function calcDuration(inMin, outMin) {
-  if (outMin >= inMin) return outMin - inMin;
-  return 1440 - inMin + outMin; // cross-midnight
+/** Format minutes-from-midnight → "HH:MM" string (wraps past midnight). */
+export function formatTime(minutes) {
+  const wrapped = ((Math.round(minutes) % 1440) + 1440) % 1440;
+  const h = Math.floor(wrapped / 60);
+  const m = wrapped % 60;
+  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
 }
 
+// ── Duration Helpers ───────────────────────────────────────────────────────
+
 /**
- * Main calculation engine.
- * @param {Array<{id, time, direction}>} entries - ordered list of time entries
- * @returns {{ totalWork, totalBreak, sessions, validPairs, warnings }}
+ * Duration between two seconds-from-midnight values.
+ * Cross-midnight aware: if end < start, wraps around 86400.
  */
-export function calculateTotals(entries) {
-  const result = {
-    totalWork: 0,
-    totalBreak: 0,
-    sessions: 0,
-    validPairs: [],
-    warnings: [],
-  };
+export function calcDurationSec(startSec, endSec) {
+  if (endSec >= startSec) return endSec - startSec;
+  return 86400 - startSec + endSec;
+}
 
-  // Filter entries that have a valid time
-  const valid = entries
-    .map((e, idx) => ({ ...e, idx, minutes: parseTime(e.time) }))
-    .filter((e) => e.minutes !== null);
+// ── Validation ─────────────────────────────────────────────────────────────
 
-  if (valid.length === 0) return result;
+/**
+ * Validate a break against the full break list.
+ * Returns { valid: boolean, error: string | null }.
+ * Incomplete breaks (no end) are always valid.
+ */
+export function validateBreak(breaks, breakObj) {
+  const { id, start, end } = breakObj;
 
-  // Walk through valid entries and extract In→Out pairs
-  let i = 0;
-  let lastOutMin = null; // track for break calculation
+  if (!start) return { valid: false, error: 'Start time is required.' };
 
-  while (i < valid.length) {
-    const cur = valid[i];
+  const startMin = parseTime(start);
+  if (startMin === null) return { valid: false, error: 'Invalid start time.' };
 
-    if (cur.direction === 'In') {
-      // Look ahead for matching Out
-      if (i + 1 < valid.length && valid[i + 1].direction === 'Out') {
-        const next = valid[i + 1];
-        const work = calcDuration(cur.minutes, next.minutes);
+  // Incomplete break — no error
+  if (!end) return { valid: true, error: null };
 
-        // Calculate break since last session
-        if (lastOutMin !== null) {
-          const brk = calcDuration(lastOutMin, cur.minutes);
-          result.totalBreak += brk;
-        }
+  const endMin = parseTime(end);
+  if (endMin === null) return { valid: false, error: 'Invalid end time.' };
+  if (endMin === startMin) return { valid: false, error: 'End must differ from start.' };
+  if (endMin < startMin) return { valid: false, error: 'End time must be after start time.' };
 
-        result.totalWork += work;
-        result.sessions += 1;
-        lastOutMin = next.minutes;
+  // Overlap check against other completed breaks
+  const overlaps = breaks.some((b) => {
+    if (b.id === id || !b.start || !b.end) return false;
+    const bS = parseTime(b.start);
+    const bE = parseTime(b.end);
+    if (bS === null || bE === null) return false;
+    return startMin < bE && endMin > bS;
+  });
+  if (overlaps) return { valid: false, error: 'This break overlaps with another.' };
 
-        result.validPairs.push({
-          in: { entry: cur, time: cur.time },
-          out: { entry: next, time: next.time },
-          work,
-        });
+  return { valid: true, error: null };
+}
 
-        i += 2;
-      } else {
-        // Incomplete session — skip
-        result.warnings.push(`Entry at row ${cur.idx + 1} (${cur.time} In) has no matching Out.`);
-        i += 1;
-      }
-    } else {
-      // Out without preceding In
-      result.warnings.push(`Entry at row ${cur.idx + 1} (${cur.time} Out) has no matching In.`);
-      i += 1;
+// ── Main Calculator ────────────────────────────────────────────────────────
+
+/**
+ * Calculate the full working session state.
+ *
+ * @param {object} p
+ * @param {number|null} p.arrivalSec  - arrival time in seconds from midnight
+ * @param {number}      p.requiredSec - required working time in seconds
+ * @param {Array}       p.breaks      - [{id, start:"HH:MM", end:"HH:MM"|""}]
+ * @param {number}      p.nowSec      - current time in seconds from midnight
+ *
+ * @returns {object} session snapshot
+ */
+export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
+  if (arrivalSec === null) {
+    return {
+      elapsedSec: 0,
+      completedBreakSec: 0,
+      activeBreakSec: 0,
+      totalBreakSec: 0,
+      workingSec: 0,
+      remainingSec: requiredSec,
+      expectedCompletionMin: null,
+      status: 'idle',
+      activeBreak: null,
+    };
+  }
+
+  // Total elapsed since arrival (cross-midnight aware)
+  const elapsedSec = calcDurationSec(arrivalSec, nowSec);
+
+  // Sum of all completed breaks (start + end both set, end > start)
+  let completedBreakSec = 0;
+  for (const b of breaks) {
+    if (!b.start || !b.end) continue;
+    const s = parseTime(b.start);
+    const e = parseTime(b.end);
+    if (s === null || e === null || e <= s) continue;
+    completedBreakSec += (e - s) * 60;
+  }
+
+  // Detect active break: has start, no end, AND break has already started.
+  // Uses cross-midnight-aware comparison: break "started" means the elapsed
+  // time since arrival to break start is <= elapsed time since arrival to now.
+  let activeBreak = null;
+  let activeBreakSec = 0;
+
+  for (const b of breaks) {
+    if (!b.start || b.end) continue; // skip completed or empty
+    const s = parseTime(b.start);
+    if (s === null) continue;
+    const breakStartSec = s * 60;
+    const breakElapsedFromArrival = calcDurationSec(arrivalSec, breakStartSec);
+    if (breakElapsedFromArrival <= elapsedSec) {
+      // This break has started
+      activeBreak = b;
+      activeBreakSec = calcDurationSec(breakStartSec, nowSec);
+      break; // only one active break at a time
     }
   }
 
-  return result;
+  const totalBreakSec = completedBreakSec + activeBreakSec;
+  const workingSec = Math.max(0, elapsedSec - totalBreakSec);
+  const remainingSec = Math.max(0, requiredSec - workingSec);
+
+  // Expected completion: arrival + required + all known break time
+  const expectedCompletionMin = (arrivalSec + requiredSec + totalBreakSec) / 60;
+
+  // Status
+  let status = 'working';
+  if (activeBreak) {
+    status = 'on-break';
+  } else if (workingSec >= requiredSec) {
+    status = 'completed';
+  }
+
+  return {
+    elapsedSec,
+    completedBreakSec,
+    activeBreakSec,
+    totalBreakSec,
+    workingSec,
+    remainingSec,
+    expectedCompletionMin,
+    status,
+    activeBreak,
+  };
 }
 
-/**
- * Get the suggested direction for a new row based on existing entries.
- */
-export function suggestNextDirection(entries) {
-  if (entries.length === 0) return 'In';
-  // find last entry with a direction
-  const last = [...entries].reverse().find((e) => e.direction);
-  if (!last) return 'In';
-  return last.direction === 'In' ? 'Out' : 'In';
-}
+// ── Clipboard ──────────────────────────────────────────────────────────────
 
-/**
- * Generate a copy-to-clipboard summary string.
- */
-export function buildSummaryText({ totalWork, totalBreak, sessions, entries }) {
+/** Build summary text for clipboard copy. */
+export function buildSummaryText({
+  arrivalTime,
+  requiredHours,
+  workingSec,
+  remainingSec,
+  completedBreakSec,
+  status,
+  expectedCompletionMin,
+}) {
+  const statusLabel =
+    status === 'on-break' ? 'On Break' :
+    status === 'completed' ? 'Completed ✓' :
+    status === 'idle' ? 'Not Started' : 'Working';
+
   return [
     'Working Hours Summary',
-    `Total Working Hours: ${formatDuration(totalWork)}`,
-    `Total Break: ${formatDuration(totalBreak)}`,
-    `Completed Sessions: ${sessions}`,
-    `Entries: ${entries.length}`,
+    `Arrival: ${arrivalTime || '--:--'}`,
+    `Required: ${requiredHours}h`,
+    `Worked so far: ${formatDuration(Math.floor(workingSec / 60))}`,
+    `Total Break: ${formatDuration(Math.floor(completedBreakSec / 60))}`,
+    `Remaining: ${formatDuration(Math.floor(remainingSec / 60))}`,
+    `Expected Completion: ${expectedCompletionMin !== null ? formatTime(expectedCompletionMin) : '--:--'}`,
+    `Status: ${statusLabel}`,
   ].join('\n');
 }
