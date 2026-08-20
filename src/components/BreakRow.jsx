@@ -1,4 +1,5 @@
 import React from 'react';
+import { isCrossMidnight, parseTime } from '../utils/timeCalculations';
 
 /**
  * BreakRow — a single break entry: start, end, delete.
@@ -6,6 +7,11 @@ import React from 'react';
  */
 function BreakRow({ breakObj, rowNumber, onUpdate, onDelete, error, isActive }) {
   const isComplete = breakObj.start && breakObj.end;
+
+  // Detect cross-midnight break (e.g. 23:55 → 00:35)
+  const startMin = parseTime(breakObj.start);
+  const endMin   = parseTime(breakObj.end);
+  const isMidnightBreak = isComplete && startMin !== null && endMin !== null && isCrossMidnight(startMin, endMin);
 
   // Visual indicator for break state
   const dotClass = isActive
@@ -42,9 +48,20 @@ function BreakRow({ breakObj, rowNumber, onUpdate, onDelete, error, isActive }) 
             className="break-time-input break-time-input--end"
             value={breakObj.end}
             onChange={(e) => onUpdate(breakObj.id, 'end', e.target.value)}
-            aria-label={`Break ${rowNumber} end time (optional)`}
+            aria-label={`Break ${rowNumber} end time (optional, can be next day)`}
             placeholder="End"
           />
+
+          {/* Cross-midnight indicator */}
+          {isMidnightBreak && (
+            <span
+              className="break-midnight-badge"
+              title="This break ends the next day (past midnight)"
+              aria-label="Ends next day"
+            >
+              +1d
+            </span>
+          )}
 
           <span className={dotClass} title={isActive ? 'Active break' : isComplete ? 'Completed' : 'Ongoing'} aria-hidden="true" />
         </div>

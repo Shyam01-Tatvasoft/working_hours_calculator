@@ -60,9 +60,42 @@ export function calcDurationSec(startSec, endSec) {
 // ── Validation ─────────────────────────────────────────────────────────────
 
 /**
+ * Returns true when a break end time is on the next calendar day.
+ * A break is cross-midnight when endMin < startMin (e.g. 23:55 → 00:35).
+ */
+export function isCrossMidnight(startMin, endMin) {
+  return endMin < startMin;
+}
+
+/**
+ * Normalise a break's end to an absolute-minute value > startMin.
+ * For same-day breaks returns endMin unchanged.
+ * For cross-midnight breaks adds 1440 (one day) so arithmetic stays linear.
+ */
+function normaliseBreakEnd(startMin, endMin) {
+  return endMin < startMin ? endMin + 1440 : endMin;
+}
+
+/**
+ * Check whether two possibly-cross-midnight break ranges overlap.
+ * All times are expressed in minutes from midnight.
+ */
+function breaksOverlap(aS, aE, bS, bE) {
+  // Normalise both ends to be > their respective starts
+  const aEnd = normaliseBreakEnd(aS, aE);
+  const bEnd = normaliseBreakEnd(bS, bE);
+
+  // Try the normal comparison, then also shift b by ±1440 to catch
+  // cases where one range straddles midnight and the other doesn't.
+  const check = (bs, be) => aS < be && aEnd > bs;
+  return check(bS, bEnd) || check(bS - 1440, bEnd - 1440) || check(bS + 1440, bEnd + 1440);
+}
+
+/**
  * Validate a break against the full break list.
  * Returns { valid: boolean, error: string | null }.
- * Incomplete breaks (no end) are always valid.
+ * Incomplete breaks (no end) are always considered valid.
+ * Cross-midnight breaks (end < start, e.g. 23:55 → 00:35) ARE supported.
  */
 export function validateBreak(breaks, breakObj) {
   const { id, start, end } = breakObj;
@@ -72,13 +105,13 @@ export function validateBreak(breaks, breakObj) {
   const startMin = parseTime(start);
   if (startMin === null) return { valid: false, error: 'Invalid start time.' };
 
-  // Incomplete break — no error
+  // Incomplete break — no error yet
   if (!end) return { valid: true, error: null };
 
   const endMin = parseTime(end);
   if (endMin === null) return { valid: false, error: 'Invalid end time.' };
   if (endMin === startMin) return { valid: false, error: 'End must differ from start.' };
-  if (endMin < startMin) return { valid: false, error: 'End time must be after start time.' };
+  // ✅ endMin < startMin is now allowed — treated as a next-day (cross-midnight) break
 
   // Overlap check against other completed breaks
   const overlaps = breaks.some((b) => {
@@ -86,7 +119,7 @@ export function validateBreak(breaks, breakObj) {
     const bS = parseTime(b.start);
     const bE = parseTime(b.end);
     if (bS === null || bE === null) return false;
-    return startMin < bE && endMin > bS;
+    return breaksOverlap(startMin, endMin, bS, bE);
   });
   if (overlaps) return { valid: false, error: 'This break overlaps with another.' };
 
@@ -124,14 +157,17 @@ export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
   // Total elapsed since arrival (cross-midnight aware)
   const elapsedSec = calcDurationSec(arrivalSec, nowSec);
 
-  // Sum of all completed breaks (start + end both set, end > start)
+  // Sum of all completed breaks (start + end both set).
+  // Cross-midnight breaks (end < start) are supported via normaliseEnd.
   let completedBreakSec = 0;
   for (const b of breaks) {
     if (!b.start || !b.end) continue;
     const s = parseTime(b.start);
     const e = parseTime(b.end);
-    if (s === null || e === null || e <= s) continue;
-    completedBreakSec += (e - s) * 60;
+    if (s === null || e === null || e === s) continue;
+    // If end < start the break crosses midnight: add 1440 minutes to end
+    const durationMin = e < s ? (e + 1440 - s) : (e - s);
+    completedBreakSec += durationMin * 60;
   }
 
   // Detect active break: has start, no end, AND break has already started.

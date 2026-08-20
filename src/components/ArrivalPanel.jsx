@@ -30,6 +30,9 @@ function ArrivalPanel({ arrivalTime, onArrivalChange, requiredHours, onRequiredH
             onChange={(e) => onArrivalChange(e.target.value)}
             aria-label="Enter your arrival time"
           />
+          <span className="field-hint field-hint--format">
+            24h format — e.g. 09:00, 14:30, 20:00
+          </span>
           {!arrivalTime && (
             <span className="field-hint">Set when you arrived at work</span>
           )}

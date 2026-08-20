@@ -1626,3 +1626,67 @@ html[data-theme="light"] .break-time-input::-webkit-calendar-picker-indicator {
 }
 
 
+/* ── Cross-midnight "+1d" badge on break rows ── */
+.break-midnight-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 7px;
+  border-radius: var(--radius-pill);
+  font-size: 0.7rem;
+  font-weight: 700;
+  letter-spacing: 0.03em;
+  background: hsla(280, 80%, 60%, 0.15);
+  color: hsl(280, 70%, 70%);
+  border: 1px solid hsla(280, 70%, 60%, 0.3);
+  white-space: nowrap;
+  user-select: none;
+  animation: badge-pop var(--transition-base) ease-out;
+}
+
+@keyframes badge-pop {
+  from { opacity: 0; transform: scale(0.7); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+html[data-theme="light"] .break-midnight-badge {
+  background: hsla(280, 70%, 50%, 0.12);
+  color: hsl(280, 60%, 45%);
+  border-color: hsla(280, 60%, 50%, 0.3);
+}
+
+/* ── Always-visible 24h format hint ── */
+.field-hint--format {
+  display: block;
+  font-size: 0.73rem;
+  color: var(--clr-text-subtle);
+  margin-top: 4px;
+  letter-spacing: 0.01em;
+}
+
+html[data-theme="light"] .field-hint--format {
+  color: hsl(220, 10%, 52%);
+}
+/* ── 24-hour time input — suppress AM/PM meridiem across all browsers ─────────
+   Setting lang="en-GB" on <html> is the primary fix; these CSS rules are a
+   belt-and-braces fallback for browsers that still render a meridiem spinner. */
+
+/* Hide the AM/PM (day-period / meridiem) segment in Chromium-based browsers */
+input[type="time"]::-webkit-datetime-edit-ampm-field,
+input[type="time"]::-webkit-datetime-edit-day-period-field {
+  display: none !important;
+}
+
+/* Ensure the hour/minute sections render cleanly and never show AM/PM text */
+input[type="time"]::-webkit-datetime-edit-hour-field,
+input[type="time"]::-webkit-datetime-edit-minute-field {
+  padding: 0 1px;
+}
+
+/* Firefox: the time input always uses 24h when the value is in HH:MM format.
+   No extra rule needed — the lang="en-GB" attribute is sufficient. */
+
+/* Add a subtle "24h" badge next to break time inputs on small screens
+   so users know the format even on 12h-locale devices */
+.break-time-input::after {
+  content: none; /* placeholder — actual badge handled via ArrivalPanel hint */
+}
