@@ -10,18 +10,19 @@ import BreakList from './components/BreakList';
 function App() {
   const {
     arrivalTime, setArrivalTime,
+    endTime,     setEndTime,
     requiredHours, setRequiredHours,
     breaks, errors,
     addBreak, updateBreak, deleteBreak,
     clearAll,
-    arrivalSec, requiredSec,
+    arrivalSec, endSec, requiredSec,
   } = useWorkingSession();
 
   const { theme, toggleTheme } = useTheme();
   const nowSec = useTimer();
 
-  // Calculate full session state every render (driven by the 1s timer)
-  const session = calcSession({ arrivalSec, requiredSec, breaks, nowSec });
+  // Calculate full session state every render (driven by 1s timer in live mode)
+  const session = calcSession({ arrivalSec, requiredSec, breaks, nowSec, endSec });
 
   const [copied, setCopied] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
@@ -29,12 +30,15 @@ function App() {
   const handleCopy = useCallback(async () => {
     const text = buildSummaryText({
       arrivalTime,
+      endTime,
       requiredHours,
       workingSec: session.workingSec,
       remainingSec: session.remainingSec,
       completedBreakSec: session.completedBreakSec,
       status: session.status,
       expectedCompletionMin: session.expectedCompletionMin,
+      expectedCompletionNextDay: session.expectedCompletionNextDay,
+      isHistorical: session.isHistorical,
     });
     try {
       await navigator.clipboard.writeText(text);
@@ -69,7 +73,7 @@ function App() {
 
           <div className="app__title-group">
             <h1 className="app__title">Working Hours Calculator</h1>
-            <p className="app__subtitle">Arrival · Breaks · Live working time · Expected completion</p>
+            <p className="app__subtitle">Arrival · Breaks · Live tracking · Historical day review</p>
           </div>
 
           {/* Theme toggle */}
@@ -107,13 +111,15 @@ function App() {
         {/* ── Main content ── */}
         <main className="app__main" id="main-content">
           {/* Live hero panel */}
-          <LiveDashboard session={session} />
+          <LiveDashboard session={session} endTime={endTime} requiredSec={requiredSec} />
 
           {/* Config grid: arrival + breaks */}
           <div className="config-grid">
             <ArrivalPanel
               arrivalTime={arrivalTime}
               onArrivalChange={setArrivalTime}
+              endTime={endTime}
+              onEndTimeChange={setEndTime}
               requiredHours={requiredHours}
               onRequiredHoursChange={setRequiredHours}
             />
@@ -200,7 +206,7 @@ function App() {
         )}
 
         <footer className="app__footer">
-          <p>Data auto-saved to browser · Live timer updates every second · Cross-midnight sessions supported</p>
+          <p>Data auto-saved · Live timer every second · Cross-midnight supported · Set End Time for historical review</p>
         </footer>
       </div>
     </div>

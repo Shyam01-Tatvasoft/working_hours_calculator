@@ -1,4 +1,5 @@
 import React from 'react';
+import TimeInput from './TimeInput';
 import { isCrossMidnight, parseTime } from '../utils/timeCalculations';
 
 /**
@@ -30,26 +31,24 @@ function BreakRow({ breakObj, rowNumber, onUpdate, onDelete, error, isActive }) 
 
         {/* Times */}
         <div className="break-item__times">
-          <input
+          <TimeInput
             id={`break-start-${breakObj.id}`}
-            type="time"
-            className="break-time-input"
             value={breakObj.start}
-            onChange={(e) => onUpdate(breakObj.id, 'start', e.target.value)}
-            aria-label={`Break ${rowNumber} start time`}
-            placeholder="Start"
+            onChange={(val) => onUpdate(breakObj.id, 'start', val)}
+            ariaLabel={`Break ${rowNumber} start time`}
+            placeholder="HH:MM"
+            className="break-time-input"
           />
 
           <span className="break-arrow" aria-hidden="true">→</span>
 
-          <input
+          <TimeInput
             id={`break-end-${breakObj.id}`}
-            type="time"
-            className="break-time-input break-time-input--end"
             value={breakObj.end}
-            onChange={(e) => onUpdate(breakObj.id, 'end', e.target.value)}
-            aria-label={`Break ${rowNumber} end time (optional, can be next day)`}
-            placeholder="End"
+            onChange={(val) => onUpdate(breakObj.id, 'end', val)}
+            ariaLabel={`Break ${rowNumber} end time (optional, can be next day)`}
+            placeholder="HH:MM"
+            className="break-time-input break-time-input--end"
           />
 
           {/* Cross-midnight indicator */}

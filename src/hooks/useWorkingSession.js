@@ -33,10 +33,14 @@ function save(data) {
 }
 
 export function useWorkingSession() {
-  // Initialize directly from localStorage (lazy initializer — runs once, immune to StrictMode)
+  // ── Initialise from localStorage (lazy initialisers — run once) ───────────
   const [arrivalTime, setArrivalTimeRaw] = useState(() => {
     const s = load();
     return s?.arrivalTime || '';
+  });
+  const [endTime, setEndTimeRaw] = useState(() => {
+    const s = load();
+    return s?.endTime || '';
   });
   const [requiredHours, setRequiredHoursRaw] = useState(() => {
     const s = load();
@@ -57,16 +61,15 @@ export function useWorkingSession() {
   // Errors are derived reactively from the break list
   const [errors, setErrors] = useState({});
 
-  // Persist on every state change
+  // ── Persist on every state change ─────────────────────────────────────────
   useEffect(() => {
-    save({ arrivalTime, requiredHours, breaks });
-  }, [arrivalTime, requiredHours, breaks]);
+    save({ arrivalTime, endTime, requiredHours, breaks });
+  }, [arrivalTime, endTime, requiredHours, breaks]);
 
-  // Re-validate breaks whenever the list changes
+  // ── Re-validate breaks whenever the list changes ───────────────────────────
   useEffect(() => {
     const newErrors = {};
     breaks.forEach((b) => {
-      // Only validate if at least start is filled
       if (!b.start) return;
       const result = validateBreak(breaks, b);
       if (!result.valid) newErrors[b.id] = result.error;
@@ -74,9 +77,11 @@ export function useWorkingSession() {
     setErrors(newErrors);
   }, [breaks]);
 
-  // ── Setters ──────────────────────────────────────────────────────────────
+  // ── Setters ───────────────────────────────────────────────────────────────
 
   const setArrivalTime = useCallback((t) => setArrivalTimeRaw(t), []);
+
+  const setEndTime = useCallback((t) => setEndTimeRaw(t), []);
 
   const setRequiredHours = useCallback((val) => {
     const n = parseFloat(val);
@@ -84,7 +89,7 @@ export function useWorkingSession() {
     setRequiredHoursRaw(Math.max(0.5, Math.min(24, n)));
   }, []);
 
-  // ── Break CRUD ────────────────────────────────────────────────────────────
+  // ── Break CRUD ─────────────────────────────────────────────────────────────
 
   const addBreak = useCallback(() => {
     setBreaks((prev) => [...prev, { id: newId(), start: '', end: '' }]);
@@ -102,29 +107,31 @@ export function useWorkingSession() {
 
   const clearAll = useCallback(() => {
     setArrivalTimeRaw('');
+    setEndTimeRaw('');
     setRequiredHoursRaw(8);
     setBreaks([]);
     setErrors({});
   }, []);
 
-  // ── Derived ───────────────────────────────────────────────────────────────
+  // ── Derived values ─────────────────────────────────────────────────────────
 
   const arrivalMin = parseTime(arrivalTime);
   const arrivalSec = arrivalMin !== null ? arrivalMin * 60 : null;
+
+  const endMin = parseTime(endTime);
+  const endSec = endMin !== null ? endMin * 60 : null;
+
   const requiredSec = Math.round(requiredHours * 3600);
 
   return {
-    arrivalTime,
-    setArrivalTime,
-    requiredHours,
-    setRequiredHours,
-    breaks,
-    errors,
-    addBreak,
-    updateBreak,
-    deleteBreak,
+    arrivalTime, setArrivalTime,
+    endTime,     setEndTime,
+    requiredHours, setRequiredHours,
+    breaks, errors,
+    addBreak, updateBreak, deleteBreak,
     clearAll,
     arrivalSec,
+    endSec,
     requiredSec,
   };
 }

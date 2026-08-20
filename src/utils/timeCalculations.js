@@ -1,6 +1,6 @@
 /**
- * Working Hours Calculator — Core Utilities (v2)
- * Model: Arrival + Breaks → Live Working Time
+ * Working Hours Calculator — Core Utilities (v3)
+ * Model: Arrival + optional EndTime + Breaks → Live or Historical Working Time
  * All durations use seconds for live-update precision.
  */
 
@@ -27,7 +27,7 @@ export function formatDuration(totalMinutes) {
   return `${h}h ${m}m`;
 }
 
-/** Format total seconds → "Xh Ym Zs" for live display (tabular-nums friendly). */
+/** Format total seconds → "Xh Ym Zs" for live display. */
 export function formatDurationLive(totalSeconds) {
   if (totalSeconds <= 0) return '0s';
   const h = Math.floor(totalSeconds / 3600);
@@ -81,12 +81,8 @@ function normaliseBreakEnd(startMin, endMin) {
  * All times are expressed in minutes from midnight.
  */
 function breaksOverlap(aS, aE, bS, bE) {
-  // Normalise both ends to be > their respective starts
   const aEnd = normaliseBreakEnd(aS, aE);
   const bEnd = normaliseBreakEnd(bS, bE);
-
-  // Try the normal comparison, then also shift b by ±1440 to catch
-  // cases where one range straddles midnight and the other doesn't.
   const check = (bs, be) => aS < be && aEnd > bs;
   return check(bS, bEnd) || check(bS - 1440, bEnd - 1440) || check(bS + 1440, bEnd + 1440);
 }
@@ -111,7 +107,7 @@ export function validateBreak(breaks, breakObj) {
   const endMin = parseTime(end);
   if (endMin === null) return { valid: false, error: 'Invalid end time.' };
   if (endMin === startMin) return { valid: false, error: 'End must differ from start.' };
-  // ✅ endMin < startMin is now allowed — treated as a next-day (cross-midnight) break
+  // ✅ endMin < startMin is allowed — treated as a cross-midnight break
 
   // Overlap check against other completed breaks
   const overlaps = breaks.some((b) => {
@@ -126,20 +122,46 @@ export function validateBreak(breaks, breakObj) {
   return { valid: true, error: null };
 }
 
+// ── Break Duration Helper ──────────────────────────────────────────────────
+
+/**
+ * Sum completed break durations in seconds.
+ * Supports cross-midnight breaks (end < start → end + 1440 min).
+ */
+function sumCompletedBreaksSec(breaks) {
+  let total = 0;
+  for (const b of breaks) {
+    if (!b.start || !b.end) continue;
+    const s = parseTime(b.start);
+    const e = parseTime(b.end);
+    if (s === null || e === null || e === s) continue;
+    const durationMin = e < s ? (e + 1440 - s) : (e - s);
+    total += durationMin * 60;
+  }
+  return total;
+}
+
 // ── Main Calculator ────────────────────────────────────────────────────────
 
 /**
  * Calculate the full working session state.
  *
  * @param {object} p
- * @param {number|null} p.arrivalSec  - arrival time in seconds from midnight
- * @param {number}      p.requiredSec - required working time in seconds
- * @param {Array}       p.breaks      - [{id, start:"HH:MM", end:"HH:MM"|""}]
- * @param {number}      p.nowSec      - current time in seconds from midnight
+ * @param {number|null} p.arrivalSec   - arrival time in seconds from midnight (null = not set)
+ * @param {number}      p.requiredSec  - required working time in seconds
+ * @param {Array}       p.breaks       - [{id, start:"HH:MM", end:"HH:MM"|""}]
+ * @param {number}      p.nowSec       - current time in seconds from midnight (live mode)
+ * @param {number|null} [p.endSec]     - departure time in seconds (historical mode when set)
  *
- * @returns {object} session snapshot
+ * @returns {object} session snapshot with:
+ *   elapsedSec, completedBreakSec, activeBreakSec, totalBreakSec,
+ *   workingSec, remainingSec, expectedCompletionMin,
+ *   expectedCompletionNextDay {boolean},
+ *   status, activeBreak, isHistorical {boolean}
  */
-export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
+export function calcSession({ arrivalSec, requiredSec, breaks, nowSec, endSec = null }) {
+  const isHistorical = endSec !== null;
+
   if (arrivalSec === null) {
     return {
       elapsedSec: 0,
@@ -149,44 +171,38 @@ export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
       workingSec: 0,
       remainingSec: requiredSec,
       expectedCompletionMin: null,
+      expectedCompletionNextDay: false,
       status: 'idle',
       activeBreak: null,
+      isHistorical,
     };
   }
 
+  // Reference point: endSec (historical) or nowSec (live)
+  const refSec = isHistorical ? endSec : nowSec;
+
   // Total elapsed since arrival (cross-midnight aware)
-  const elapsedSec = calcDurationSec(arrivalSec, nowSec);
+  const elapsedSec = calcDurationSec(arrivalSec, refSec);
 
-  // Sum of all completed breaks (start + end both set).
-  // Cross-midnight breaks (end < start) are supported via normaliseEnd.
-  let completedBreakSec = 0;
-  for (const b of breaks) {
-    if (!b.start || !b.end) continue;
-    const s = parseTime(b.start);
-    const e = parseTime(b.end);
-    if (s === null || e === null || e === s) continue;
-    // If end < start the break crosses midnight: add 1440 minutes to end
-    const durationMin = e < s ? (e + 1440 - s) : (e - s);
-    completedBreakSec += durationMin * 60;
-  }
+  // Sum all completed breaks
+  const completedBreakSec = sumCompletedBreaksSec(breaks);
 
-  // Detect active break: has start, no end, AND break has already started.
-  // Uses cross-midnight-aware comparison: break "started" means the elapsed
-  // time since arrival to break start is <= elapsed time since arrival to now.
+  // Detect active break (only in live mode)
   let activeBreak = null;
   let activeBreakSec = 0;
 
-  for (const b of breaks) {
-    if (!b.start || b.end) continue; // skip completed or empty
-    const s = parseTime(b.start);
-    if (s === null) continue;
-    const breakStartSec = s * 60;
-    const breakElapsedFromArrival = calcDurationSec(arrivalSec, breakStartSec);
-    if (breakElapsedFromArrival <= elapsedSec) {
-      // This break has started
-      activeBreak = b;
-      activeBreakSec = calcDurationSec(breakStartSec, nowSec);
-      break; // only one active break at a time
+  if (!isHistorical) {
+    for (const b of breaks) {
+      if (!b.start || b.end) continue; // skip completed or empty
+      const s = parseTime(b.start);
+      if (s === null) continue;
+      const breakStartSec = s * 60;
+      const breakElapsedFromArrival = calcDurationSec(arrivalSec, breakStartSec);
+      if (breakElapsedFromArrival <= elapsedSec) {
+        activeBreak = b;
+        activeBreakSec = calcDurationSec(breakStartSec, refSec);
+        break; // only one active break at a time
+      }
     }
   }
 
@@ -195,14 +211,28 @@ export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
   const remainingSec = Math.max(0, requiredSec - workingSec);
 
   // Expected completion: arrival + required + all known break time
-  const expectedCompletionMin = (arrivalSec + requiredSec + totalBreakSec) / 60;
+  // (only meaningful in live mode — in historical mode we know the actual end)
+  let expectedCompletionMin = null;
+  let expectedCompletionNextDay = false;
+
+  if (!isHistorical) {
+    // Use only completed breaks for expected completion (active break end is unknown)
+    const knownBreakSec = completedBreakSec;
+    expectedCompletionMin = (arrivalSec + requiredSec + knownBreakSec) / 60;
+    // >= 1440 means the expected end is tomorrow (next calendar day from arrival)
+    expectedCompletionNextDay = expectedCompletionMin >= 1440;
+  }
 
   // Status
-  let status = 'working';
-  if (activeBreak) {
+  let status;
+  if (isHistorical) {
+    status = 'historical';
+  } else if (activeBreak) {
     status = 'on-break';
   } else if (workingSec >= requiredSec) {
     status = 'completed';
+  } else {
+    status = 'working';
   }
 
   return {
@@ -213,8 +243,10 @@ export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
     workingSec,
     remainingSec,
     expectedCompletionMin,
+    expectedCompletionNextDay,
     status,
     activeBreak,
+    isHistorical,
   };
 }
 
@@ -223,26 +255,49 @@ export function calcSession({ arrivalSec, requiredSec, breaks, nowSec }) {
 /** Build summary text for clipboard copy. */
 export function buildSummaryText({
   arrivalTime,
+  endTime,
   requiredHours,
   workingSec,
   remainingSec,
   completedBreakSec,
   status,
   expectedCompletionMin,
+  expectedCompletionNextDay,
+  isHistorical,
 }) {
   const statusLabel =
-    status === 'on-break' ? 'On Break' :
-    status === 'completed' ? 'Completed ✓' :
-    status === 'idle' ? 'Not Started' : 'Working';
+    status === 'on-break'   ? 'On Break' :
+    status === 'completed'  ? 'Completed ✓' :
+    status === 'historical' ? 'Historical Record' :
+    status === 'idle'       ? 'Not Started' : 'Working';
 
-  return [
+  const expectedEnd = expectedCompletionMin !== null
+    ? formatTime(expectedCompletionMin) + (expectedCompletionNextDay ? ' (+next day)' : '')
+    : endTime || '--:--';
+
+  const lines = [
     'Working Hours Summary',
-    `Arrival: ${arrivalTime || '--:--'}`,
-    `Required: ${requiredHours}h`,
-    `Worked so far: ${formatDuration(Math.floor(workingSec / 60))}`,
-    `Total Break: ${formatDuration(Math.floor(completedBreakSec / 60))}`,
-    `Remaining: ${formatDuration(Math.floor(remainingSec / 60))}`,
-    `Expected Completion: ${expectedCompletionMin !== null ? formatTime(expectedCompletionMin) : '--:--'}`,
-    `Status: ${statusLabel}`,
-  ].join('\n');
+    `Arrival:   ${arrivalTime || '--:--'}`,
+  ];
+
+  if (isHistorical && endTime) {
+    lines.push(`End Time:  ${endTime}`);
+  }
+
+  lines.push(
+    `Required:  ${requiredHours}h`,
+    `Worked:    ${formatDuration(Math.floor(workingSec / 60))}`,
+    `Break:     ${formatDuration(Math.floor(completedBreakSec / 60))}`,
+  );
+
+  if (!isHistorical) {
+    lines.push(
+      `Remaining: ${formatDuration(Math.floor(remainingSec / 60))}`,
+      `Expected End: ${expectedEnd}`,
+    );
+  }
+
+  lines.push(`Status:    ${statusLabel}`);
+
+  return lines.join('\n');
 }

@@ -1688,5 +1688,154 @@ input[type="time"]::-webkit-datetime-edit-minute-field {
 /* Add a subtle "24h" badge next to break time inputs on small screens
    so users know the format even on 12h-locale devices */
 .break-time-input::after {
-  content: none; /* placeholder — actual badge handled via ArrivalPanel hint */
+  content: none;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Custom 24h Time Input (.time-text-input)
+   Replaces <input type="time"> to prevent AM/PM pickers on all devices.
+   Inherits visual styling from .field-input / .break-time-input via className.
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.time-text-input {
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 0.06em;
+  cursor: text;
+}
+
+/* Override calendar-picker rules that no longer apply to text inputs */
+.time-text-input::-webkit-calendar-picker-indicator { display: none; }
+
+/* Placeholder color */
+.time-text-input::placeholder {
+  color: var(--clr-text-subtle);
+  opacity: 0.7;
+  letter-spacing: 0.04em;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Expected End "+1d" badge (shown when completion crosses midnight)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.expected-end-nextday {
+  display: inline-flex;
+  align-items: center;
+  margin-left: 5px;
+  padding: 1px 6px;
+  border-radius: var(--radius-pill);
+  font-size: 0.65rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  vertical-align: middle;
+  background: hsla(280, 80%, 60%, 0.18);
+  color: hsl(280, 70%, 72%);
+  border: 1px solid hsla(280, 70%, 60%, 0.3);
+  white-space: nowrap;
+  user-select: none;
+  animation: badge-pop var(--transition-base) ease-out;
+}
+
+html[data-theme="light"] .expected-end-nextday {
+  background: hsla(280, 70%, 50%, 0.12);
+  color: hsl(280, 60%, 42%);
+  border-color: hsla(280, 60%, 50%, 0.3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Historical Mode Styles
+   ══════════════════════════════════════════════════════════════════════════ */
+
+/* Status badge for historical records */
+.status--historical {
+  background: hsla(200, 70%, 50%, 0.15);
+  color: hsl(200, 70%, 65%);
+  border: 1px solid hsla(200, 70%, 55%, 0.3);
+}
+
+html[data-theme="light"] .status--historical {
+  background: hsla(200, 70%, 50%, 0.1);
+  color: hsl(200, 65%, 40%);
+  border-color: hsla(200, 65%, 50%, 0.3);
+}
+
+/* Subtle tint on the dashboard card in historical mode */
+.live-dashboard--historical {
+  border-color: hsla(200, 70%, 50%, 0.25);
+  box-shadow: var(--shadow-md), inset 0 0 0 1px hsla(200, 70%, 50%, 0.1);
+}
+
+html[data-theme="light"] .live-dashboard--historical {
+  border-color: hsla(200, 70%, 45%, 0.2);
+}
+
+/* Over/under target delta label in historical primary card */
+.hist-delta {
+  display: block;
+  font-size: 0.82rem;
+  font-weight: 600;
+  margin-top: 6px;
+  letter-spacing: 0.01em;
+}
+
+.hist-delta--over {
+  color: hsl(152, 70%, 52%);
+}
+
+.hist-delta--short {
+  color: hsl(43, 90%, 58%);
+}
+
+html[data-theme="light"] .hist-delta--over  { color: hsl(152, 60%, 38%); }
+html[data-theme="light"] .hist-delta--short { color: hsl(43, 80%, 42%); }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Mode badge (Historical / Live) in ArrivalPanel header
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.mode-badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 3px 10px;
+  border-radius: var(--radius-pill);
+  font-size: 0.72rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  user-select: none;
+}
+
+.mode-badge--historical {
+  background: hsla(200, 70%, 50%, 0.15);
+  color: hsl(200, 70%, 65%);
+  border: 1px solid hsla(200, 70%, 55%, 0.3);
+}
+
+html[data-theme="light"] .mode-badge--historical {
+  background: hsla(200, 70%, 50%, 0.1);
+  color: hsl(200, 65%, 40%);
+  border-color: hsla(200, 65%, 50%, 0.25);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   End Time field — active highlight when a value is set
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.field-input--active {
+  border-color: hsl(200, 70%, 52%) !important;
+  box-shadow: 0 0 0 3px hsla(200, 70%, 52%, 0.18);
+}
+
+html[data-theme="light"] .field-input--active {
+  border-color: hsl(200, 65%, 48%) !important;
+  box-shadow: 0 0 0 3px hsla(200, 65%, 48%, 0.15);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Optional label suffix
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.field-label__optional {
+  font-size: 0.72rem;
+  font-weight: 400;
+  color: var(--clr-text-subtle);
+  margin-left: 4px;
 }

@@ -1,9 +1,20 @@
 import React from 'react';
+import TimeInput from './TimeInput';
 
 /**
- * ArrivalPanel — arrival time + required working hours configuration.
+ * ArrivalPanel — arrival time, optional end time, and required working hours.
+ *
+ * Two modes:
+ *  • Live mode    — only arrival set; timer runs in real-time
+ *  • Historical   — arrival + end time set; calculates a past day's hours
  */
-function ArrivalPanel({ arrivalTime, onArrivalChange, requiredHours, onRequiredHoursChange }) {
+function ArrivalPanel({
+  arrivalTime, onArrivalChange,
+  endTime,     onEndTimeChange,
+  requiredHours, onRequiredHoursChange,
+}) {
+  const isHistorical = Boolean(endTime);
+
   return (
     <div className="arrival-panel card">
       <div className="card__head">
@@ -14,31 +25,55 @@ function ArrivalPanel({ arrivalTime, onArrivalChange, requiredHours, onRequiredH
           </svg>
           Session Setup
         </h2>
+        {isHistorical && (
+          <span className="mode-badge mode-badge--historical" title="Calculating a past day's hours">
+            Historical
+          </span>
+        )}
       </div>
 
       <div className="arrival-panel__body">
-        {/* Arrival Time */}
+
+        {/* ── Arrival Time ── */}
         <div className="field-group">
           <label className="field-label" htmlFor="arrival-time-input">
             Arrival Time
           </label>
-          <input
+          <TimeInput
             id="arrival-time-input"
-            type="time"
-            className="field-input"
             value={arrivalTime}
-            onChange={(e) => onArrivalChange(e.target.value)}
-            aria-label="Enter your arrival time"
+            onChange={onArrivalChange}
+            ariaLabel="Enter your arrival time in 24-hour format"
+            placeholder="HH:MM"
+            className="field-input"
           />
           <span className="field-hint field-hint--format">
-            24h format — e.g. 09:00, 14:30, 20:00
+            24h format — e.g. 09:00, 14:30, 22:30
           </span>
-          {!arrivalTime && (
-            <span className="field-hint">Set when you arrived at work</span>
-          )}
         </div>
 
-        {/* Required Working Hours */}
+        {/* ── End Time (optional — enables historical mode) ── */}
+        <div className="field-group">
+          <label className="field-label" htmlFor="end-time-input">
+            End Time
+            <span className="field-label__optional"> (optional)</span>
+          </label>
+          <TimeInput
+            id="end-time-input"
+            value={endTime}
+            onChange={onEndTimeChange}
+            ariaLabel="Enter your departure / end time in 24-hour format (optional)"
+            placeholder="HH:MM"
+            className={`field-input${isHistorical ? ' field-input--active' : ''}`}
+          />
+          <span className="field-hint">
+            {isHistorical
+              ? '📋 Historical mode — showing totals for a completed day'
+              : 'Set to calculate a past day\'s total working hours'}
+          </span>
+        </div>
+
+        {/* ── Required Working Hours ── */}
         <div className="field-group">
           <label className="field-label" htmlFor="required-hours-input">
             Required Working Hours
