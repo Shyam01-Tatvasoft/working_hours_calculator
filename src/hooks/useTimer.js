@@ -16,3 +16,15 @@ export function useTimer() {
 
   return nowSec;
 }
+
+/** Returns Date.now() in milliseconds, updated every 1 second. */
+export function useTimerMs() {
+  const [nowMs, setNowMs] = useState(Date.now);
+
+  useEffect(() => {
+    const id = setInterval(() => setNowMs(Date.now()), 1000);
+    return () => clearInterval(id);
+  }, []);
+
+  return nowMs;
+}
