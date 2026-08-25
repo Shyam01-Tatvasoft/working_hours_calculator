@@ -4,9 +4,9 @@ import { isCrossMidnight, parseTime } from '../utils/timeCalculations';
 
 /**
  * BreakRow — a single break entry: start, end, delete.
- * Props: breakObj, rowNumber, onUpdate, onDelete, error, isActive
+ * Props: breakObj, rowNumber, onUpdate, onDelete, error, isActive, isHistorical
  */
-function BreakRow({ breakObj, rowNumber, onUpdate, onDelete, error, isActive }) {
+function BreakRow({ breakObj, rowNumber, onUpdate, onDelete, error, isActive, isHistorical }) {
   const isComplete = breakObj.start && breakObj.end;
 
   // Detect cross-midnight break (e.g. 23:55 → 00:35)

@@ -1839,3 +1839,212 @@ html[data-theme="light"] .field-input--active {
   color: var(--clr-text-subtle);
   margin-left: 4px;
 }
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Start Break / Stop Break buttons (live mode only)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.break-ctrl-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  font-family: inherit;
+  font-size: 0.9rem;
+  font-weight: 600;
+  padding: 10px var(--space-5);
+  border-radius: var(--radius-md);
+  border: 1px solid transparent;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: 100%;
+  letter-spacing: 0.01em;
+}
+
+/* Start Break — green */
+.break-ctrl-btn--start {
+  background: hsla(152, 60%, 42%, 0.14);
+  color: hsl(152, 65%, 52%);
+  border-color: hsla(152, 60%, 42%, 0.35);
+}
+
+.break-ctrl-btn--start:hover:not(:disabled) {
+  background: hsla(152, 60%, 42%, 0.24);
+  border-color: hsl(152, 60%, 48%);
+  color: hsl(152, 72%, 62%);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 14px hsla(152, 65%, 42%, 0.28);
+}
+
+.break-ctrl-btn--start:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* Disabled Start Break */
+.break-ctrl-btn--disabled,
+.break-ctrl-btn--start:disabled {
+  opacity: 0.38;
+  cursor: not-allowed;
+  pointer-events: none;
+}
+
+/* Stop Break — orange/red */
+.break-ctrl-btn--stop {
+  background: hsla(24, 90%, 52%, 0.14);
+  color: hsl(24, 92%, 60%);
+  border-color: hsla(24, 90%, 52%, 0.35);
+  font-size: 0.82rem;
+  padding: 7px var(--space-4);
+  width: auto;
+  white-space: nowrap;
+}
+
+.break-ctrl-btn--stop:hover {
+  background: hsla(24, 90%, 52%, 0.24);
+  border-color: hsl(24, 90%, 56%);
+  color: hsl(24, 95%, 68%);
+  box-shadow: 0 3px 10px hsla(24, 90%, 52%, 0.28);
+}
+
+/* Light theme adjustments */
+html[data-theme="light"] .break-ctrl-btn--start {
+  background: hsla(152, 55%, 42%, 0.1);
+  color: hsl(152, 60%, 36%);
+  border-color: hsla(152, 55%, 42%, 0.3);
+}
+
+html[data-theme="light"] .break-ctrl-btn--stop {
+  background: hsla(24, 85%, 50%, 0.1);
+  color: hsl(24, 80%, 40%);
+  border-color: hsla(24, 85%, 50%, 0.3);
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Active Break Banner — shown above the break list when a break is running
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.active-break-banner {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  padding: var(--space-4) var(--space-5);
+  border-radius: var(--radius-md);
+  background: hsla(24, 85%, 52%, 0.1);
+  border: 1px solid hsla(24, 85%, 52%, 0.28);
+  margin-bottom: var(--space-3);
+  flex-wrap: wrap;
+}
+
+html[data-theme="light"] .active-break-banner {
+  background: hsla(24, 80%, 52%, 0.08);
+  border-color: hsla(24, 80%, 52%, 0.22);
+}
+
+.active-break-banner__left {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  min-width: 0;
+}
+
+.active-break-banner__right {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+/* Pulsing orange dot */
+.active-break-pulse {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: hsl(24, 92%, 60%);
+  flex-shrink: 0;
+  box-shadow: 0 0 0 0 hsla(24, 92%, 60%, 0.5);
+  animation: break-pulse 1.6s ease-in-out infinite;
+}
+
+@keyframes break-pulse {
+  0%   { box-shadow: 0 0 0 0 hsla(24, 92%, 60%, 0.5); }
+  60%  { box-shadow: 0 0 0 7px hsla(24, 92%, 60%, 0); }
+  100% { box-shadow: 0 0 0 0 hsla(24, 92%, 60%, 0); }
+}
+
+.active-break-banner__info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.active-break-banner__label {
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: hsl(24, 92%, 62%);
+  letter-spacing: 0.03em;
+  text-transform: uppercase;
+}
+
+.active-break-banner__time {
+  font-size: 0.82rem;
+  color: var(--clr-text-muted);
+}
+
+.active-break-banner__time strong {
+  color: var(--clr-text);
+  font-weight: 600;
+}
+
+/* Live duration ticker */
+.active-break-banner__duration {
+  font-size: 1.1rem;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  color: hsl(24, 92%, 64%);
+  letter-spacing: 0.04em;
+  min-width: 6ch;
+  text-align: right;
+}
+
+/* ══════════════════════════════════════════════════════════════════════════
+   Break live-mode footer (Start Break + Add manually)
+   ══════════════════════════════════════════════════════════════════════════ */
+
+.break-live-footer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+/* "Add manually" — subtle secondary text-link style button */
+.break-manual-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-family: inherit;
+  font-size: 0.78rem;
+  font-weight: 500;
+  color: var(--clr-text-subtle);
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 3px var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: color var(--transition-fast);
+  letter-spacing: 0.01em;
+}
+
+.break-manual-btn:hover {
+  color: var(--clr-text-muted);
+}
+
+.break-manual-btn svg {
+  flex-shrink: 0;
+  opacity: 0.7;
+}
+
+

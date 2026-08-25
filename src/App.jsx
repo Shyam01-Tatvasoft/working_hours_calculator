@@ -14,6 +14,7 @@ function App() {
     requiredHours, setRequiredHours,
     breaks, errors,
     addBreak, updateBreak, deleteBreak,
+    startBreak, stopBreak,
     clearAll,
     arrivalSec, endSec, requiredSec,
   } = useWorkingSession();
@@ -24,8 +25,27 @@ function App() {
   // Calculate full session state every render (driven by 1s timer in live mode)
   const session = calcSession({ arrivalSec, requiredSec, breaks, nowSec, endSec });
 
+  // Derive "HH:MM" string from live nowSec for break stamping
+  const nowStr = (() => {
+    const h = Math.floor(nowSec / 3600) % 24;
+    const m = Math.floor((nowSec % 3600) / 60);
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}`;
+  })();
+
+  const isHistorical = session.isHistorical;
+
   const [copied, setCopied] = useState(false);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
+
+  const handleStartBreak = useCallback(() => {
+    startBreak(nowStr);
+  }, [startBreak, nowStr]);
+
+  const handleStopBreak = useCallback(() => {
+    if (session.activeBreak) {
+      stopBreak(session.activeBreak.id, nowStr);
+    }
+  }, [stopBreak, session.activeBreak, nowStr]);
 
   const handleCopy = useCallback(async () => {
     const text = buildSummaryText({
@@ -128,9 +148,14 @@ function App() {
               breaks={breaks}
               errors={errors}
               activeBreak={session.activeBreak}
+              activeBreakSec={session.activeBreakSec}
+              isHistorical={isHistorical}
+              hasArrival={Boolean(arrivalTime)}
               onAdd={addBreak}
               onUpdate={updateBreak}
               onDelete={deleteBreak}
+              onStartBreak={handleStartBreak}
+              onStopBreak={handleStopBreak}
             />
           </div>
 

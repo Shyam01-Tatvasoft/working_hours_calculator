@@ -44,7 +44,7 @@ export function useWorkingSession() {
   });
   const [requiredHours, setRequiredHoursRaw] = useState(() => {
     const s = load();
-    return typeof s?.requiredHours === 'number' ? s.requiredHours : 8;
+    return typeof s?.requiredHours === 'number' ? s.requiredHours : 8.5;
   });
   const [breaks, setBreaks] = useState(() => {
     const s = load();
@@ -108,9 +108,31 @@ export function useWorkingSession() {
   const clearAll = useCallback(() => {
     setArrivalTimeRaw('');
     setEndTimeRaw('');
-    setRequiredHoursRaw(8);
+    setRequiredHoursRaw(8.5);
     setBreaks([]);
     setErrors({});
+  }, []);
+
+  // ── Live Break Controls ───────────────────────────────────────────────────
+  // Used only in live mode (no endTime set).
+
+  /**
+   * Stamp the current time as the start of a new break.
+   * @param {string} nowStr — current time as "HH:MM"
+   */
+  const startBreak = useCallback((nowStr) => {
+    setBreaks((prev) => [...prev, { id: newId(), start: nowStr, end: '' }]);
+  }, []);
+
+  /**
+   * Stamp the current time as the end of the active (open) break.
+   * @param {string} breakId — id of the break to close
+   * @param {string} nowStr  — current time as "HH:MM"
+   */
+  const stopBreak = useCallback((breakId, nowStr) => {
+    setBreaks((prev) =>
+      prev.map((b) => (b.id === breakId ? { ...b, end: nowStr } : b))
+    );
   }, []);
 
   // ── Derived values ─────────────────────────────────────────────────────────
@@ -129,6 +151,7 @@ export function useWorkingSession() {
     requiredHours, setRequiredHours,
     breaks, errors,
     addBreak, updateBreak, deleteBreak,
+    startBreak, stopBreak,
     clearAll,
     arrivalSec,
     endSec,
