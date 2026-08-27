@@ -301,3 +301,207 @@ export function buildSummaryText({
 
   return lines.join('\n');
 }
+
+// ═══════════════════════════════════════════════════════════════════════════
+// Tracker (timestamp-based) Utilities
+// All times stored as ISO strings; no HH:MM strings as source-of-truth.
+// ═══════════════════════════════════════════════════════════════════════════
+
+/** Today's date string in local time: "YYYY-MM-DD" */
+export function getLocalDateStr() {
+  const d = new Date();
+  return [
+    d.getFullYear(),
+    String(d.getMonth() + 1).padStart(2, '0'),
+    String(d.getDate()).padStart(2, '0'),
+  ].join('-');
+}
+
+/** Format an ISO timestamp to local "HH:MM" string. */
+export function formatTimeFromIso(isoStr) {
+  if (!isoStr) return '';
+  const d = new Date(isoStr);
+  return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+}
+
+/**
+ * Convert a local "HH:MM" entry to an ISO timestamp anchored to a given
+ * session date string ("YYYY-MM-DD").
+ *
+ * Cross-midnight detection: if the resulting local datetime would be BEFORE
+ * crossMidnightRef (an ISO string), one calendar day is added automatically.
+ *
+ * Returns null on invalid input.
+ */
+export function hmToIsoForDate(sessionDateStr, hmStr, crossMidnightRef = null) {
+  if (!hmStr) return null;
+  const match = hmStr.match(/^(\d{1,2}):(\d{2})$/);
+  if (!match) return null;
+  const h = parseInt(match[1], 10);
+  const m = parseInt(match[2], 10);
+  if (h < 0 || h > 23 || m < 0 || m > 59) return null;
+
+  const [year, month, day] = sessionDateStr.split('-').map(Number);
+  const local = new Date(year, month - 1, day, h, m, 0, 0);
+
+  if (crossMidnightRef) {
+    const refMs = new Date(crossMidnightRef).getTime();
+    if (local.getTime() < refMs) {
+      local.setDate(local.getDate() + 1);
+    }
+  }
+
+  return local.toISOString();
+}
+
+/** Returns true when start and end are on different local calendar days. */
+export function isCrossMidnightIso(startIso, endIso) {
+  if (!startIso || !endIso) return false;
+  const s = new Date(startIso);
+  const e = new Date(endIso);
+  return (
+    s.getFullYear() !== e.getFullYear() ||
+    s.getMonth()    !== e.getMonth()    ||
+    s.getDate()     !== e.getDate()
+  );
+}
+
+/** Format milliseconds → live display string with seconds. */
+export function formatDurationMs(ms) {
+  if (ms <= 0) return '0s';
+  const totalS = Math.floor(ms / 1000);
+  const h = Math.floor(totalS / 3600);
+  const m = Math.floor((totalS % 3600) / 60);
+  const s = totalS % 60;
+  if (h === 0 && m === 0) return `${s}s`;
+  if (h === 0) return `${m}m ${String(s).padStart(2, '0')}s`;
+  return `${h}h ${m}m ${String(s).padStart(2, '0')}s`;
+}
+
+/** Format milliseconds → short display (no seconds). */
+export function formatDurationMsShort(ms) {
+  if (ms <= 0) return '0m';
+  const totalM = Math.floor(ms / 60000);
+  const h = Math.floor(totalM / 60);
+  const m = totalM % 60;
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
+  return `${h}h ${m}m`;
+}
+
+/**
+ * Validate an ISO-timestamp-based break against the full break list.
+ * Returns an error string, or null if valid / not yet complete.
+ */
+export function validateBreakIso(breaks, b) {
+  if (!b.start || !b.end) return null; // incomplete — no error yet
+
+  const s = new Date(b.start).getTime();
+  const e = new Date(b.end).getTime();
+
+  if (e <= s) return 'End time must be after start time.';
+
+  for (const other of breaks) {
+    if (other.id === b.id || !other.start || !other.end) continue;
+    const os = new Date(other.start).getTime();
+    const oe = new Date(other.end).getTime();
+    if (s < oe && e > os) return 'This break overlaps with another break.';
+  }
+
+  return null;
+}
+
+/**
+ * Calculate full tracker session statistics from ISO-timestamp data.
+ *
+ * @param {object} p
+ * @param {{ workStart, workEnd, breaks, requiredHours }} p.session
+ * @param {number} p.nowMs  — Date.now(), refreshed every second
+ */
+export function calcTrackerSession({ session, nowMs }) {
+  const { workStart, workEnd, breaks, requiredHours } = session;
+  const requiredMs = requiredHours * 3600 * 1000;
+
+  if (!workStart) {
+    return {
+      status: 'idle',
+      elapsedMs: 0,
+      workingMs: 0,
+      completedBreakMs: 0,
+      activeBreakMs: 0,
+      totalBreakMs: 0,
+      remainingMs: requiredMs,
+      expectedEndMs: null,
+      hoursCompleted: false,
+      activeBreak: null,
+      isCompleted: false,
+    };
+  }
+
+  const isCompleted = Boolean(workEnd);
+  const startMs = new Date(workStart).getTime();
+  const refMs   = isCompleted ? new Date(workEnd).getTime() : nowMs;
+
+  const elapsedMs = Math.max(0, refMs - startMs);
+
+  let completedBreakMs = 0;
+  let activeBreak = null;
+  let activeBreakMs = 0;
+
+  for (const b of breaks) {
+    if (b.start && b.end) {
+      completedBreakMs += Math.max(0, new Date(b.end).getTime() - new Date(b.start).getTime());
+    } else if (b.start && !b.end && !isCompleted) {
+      activeBreak = b;
+      activeBreakMs = Math.max(0, nowMs - new Date(b.start).getTime());
+    }
+  }
+
+  const totalBreakMs = completedBreakMs + activeBreakMs;
+  const workingMs   = Math.max(0, elapsedMs - totalBreakMs);
+  const remainingMs = Math.max(0, requiredMs - workingMs);
+  const hoursCompleted = workingMs >= requiredMs;
+
+  // Expected end: workStart + required + completed breaks (not active)
+  const expectedEndMs = isCompleted ? null : startMs + requiredMs + completedBreakMs;
+
+  let status;
+  if (isCompleted)  status = 'completed';
+  else if (activeBreak) status = 'on-break';
+  else              status = 'working';
+
+  return {
+    status,
+    elapsedMs,
+    workingMs,
+    completedBreakMs,
+    activeBreakMs,
+    totalBreakMs,
+    remainingMs,
+    expectedEndMs,
+    hoursCompleted,
+    activeBreak,
+    isCompleted,
+  };
+}
+
+/** Human-readable label for a date string "YYYY-MM-DD". */
+export function formatDateLabel(dateStr) {
+  const [y, m, d] = dateStr.split('-').map(Number);
+  const date = new Date(y, m - 1, d);
+
+  const today = new Date();
+  const todayStr = getLocalDateStr();
+  if (dateStr === todayStr) return 'Today';
+
+  const yest = new Date(today);
+  yest.setDate(yest.getDate() - 1);
+  const yesterdayStr = [
+    yest.getFullYear(),
+    String(yest.getMonth() + 1).padStart(2, '0'),
+    String(yest.getDate()).padStart(2, '0'),
+  ].join('-');
+  if (dateStr === yesterdayStr) return 'Yesterday';
+
+  return date.toLocaleDateString('en-GB', { weekday: 'short', day: 'numeric', month: 'short', year: 'numeric' });
+}
